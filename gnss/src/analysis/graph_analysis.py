@@ -9,7 +9,8 @@ from gps_driver.msg import Customrtk
 from sklearn.linear_model import LinearRegression
 
 class GPSAnalyzer:
-    def __init__(self):
+    def __init__(self, bag_index):
+        self.bag_index = bag_index
         self.easting_data = []
         self.northing_data = []
         self.altitude_data = []
@@ -24,7 +25,7 @@ class GPSAnalyzer:
 
     def analyze_data(self):
         if not self.easting_data or not self.northing_data or not self.altitude_data:
-            rospy.logwarn("No data found for analysis.")
+            rospy.logwarn(f"No data found for analysis in bag {self.bag_index}.")
             return
 
         easting_centroid = np.mean(self.easting_data)
@@ -34,48 +35,54 @@ class GPSAnalyzer:
         centered_easting = np.array(self.easting_data) - easting_centroid
         centered_northing = np.array(self.northing_data) - northing_centroid
 
-        # Create scatterplot for stationary northing vs. easting
+        # Create scatterplot for stationary northing vs. easting with different colors
         plt.figure(figsize=(10, 6))
-        plt.scatter(centered_easting, centered_northing, label="Stationary Data", marker='o')
+        plt.scatter(centered_easting, centered_northing, label=f"Bag {self.bag_index} Data", marker='o')
         plt.scatter(0, 0, color='red', marker='x', label="Centroid")
         plt.xlabel("Easting (m)")
         plt.ylabel("Northing (m)")
-        plt.title("Stationary Northing vs. Easting Scatterplot")
+        plt.title(f"Stationary Northing vs. Easting Scatterplot (Bag {self.bag_index})")
         plt.legend()
         plt.grid(True)
         plt.show()
 
-        # Create stationary altitude vs. time plot
+        # Create stationary altitude vs. time plot with different colors
         plt.figure(figsize=(10, 6))
-        plt.plot(self.utc_data, self.altitude_data, label="Stationary Data", marker='o')
+        plt.plot(self.utc_data, self.altitude_data, label=f"Bag {self.bag_index} Data", marker='o')
         plt.xlabel("Time (s)")
         plt.ylabel("Altitude (m)")
-        plt.title("Stationary Altitude vs. Time Plot")
+        plt.title(f"Stationary Altitude vs. Time Plot (Bag {self.bag_index})")
         plt.legend()
         plt.grid(True)
         plt.show()
 
-def read_bag_data(bag_file):
-    gps_analyzer = GPSAnalyzer()
-    bag = rosbag.Bag(bag_file)
+def read_bag_data(bag_files):
+    gps_analyzers = []
+    
+    for i, bag_file in enumerate(bag_files):
+        gps_analyzer = GPSAnalyzer(i)
+        bag = rosbag.Bag(bag_file)
 
-    for topic, msg, t in bag.read_messages(topics=['/gps']):
-        gps_analyzer.callback(msg)
+        for topic, msg, t in bag.read_messages(topics=['/gps']):
+            gps_analyzer.callback(msg)
 
-    bag.close()
+        bag.close()
+        gps_analyzers.append(gps_analyzer)
 
-    return gps_analyzer
+    return gps_analyzers
 
 if __name__ == '__main__':
     try:
         rospy.init_node('gps_analyzer', anonymous=True)
 
-        # Replace 'your_bag_file.bag' with the actual path to your bag file
-        bag_file = '/home/harshi/gnss/src/data/openRTK_H.bag'
+        # Replace with the actual paths to your bag files
+        bag_files = ['/home/harshi/gnss/src/data/openRTK_H.bag', '/home/harshi/gnss/src/data/occludedRTK_H.bag']
 
-        gps_analyzer = read_bag_data(bag_file)
-        gps_analyzer.analyze_data()
+        gps_analyzers = read_bag_data(bag_files)
         
+        for gps_analyzer in gps_analyzers:
+            gps_analyzer.analyze_data()
+
         rospy.spin()
     except rospy.ROSInterruptException:
         pass
